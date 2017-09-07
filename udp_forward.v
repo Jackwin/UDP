@@ -3,7 +3,7 @@
 Return the received UPD packets without any further processing.
 */
 
-module udp_proc (
+module udp_forward (
     input               clk,
     input               reset,
 

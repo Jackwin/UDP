@@ -8,38 +8,38 @@
 `timescale 1ns / 1ps
 
 module send_top (
-    input          clk,
-    input          reset,
+input          clk,
+input          reset,
 
-    //Local IP and MAC
-    input [31:0]        local_IP_in,
-    input [47:0]        local_MAC_in,
+//Local IP and MAC
+input [31:0]        local_IP_in,
+input [47:0]        local_MAC_in,
 
-    // IP and MAC address is from the incoming ARP packet
-    input [31:0]        remote_ip_addr_in,
-    input [47:0]        remote_mac_addr_in,
-    input               arp_reply_in,
-    output              arp_reply_ack_out,
+// IP and MAC address is from the incoming ARP packet
+input [31:0]        remote_ip_addr_in,
+input [47:0]        remote_mac_addr_in,
+input               arp_reply_in,
+output              arp_reply_ack_out,
 
-    input [1:0]    op,
-    //inputs from application software to UDP/TCP stack
-    input             data_from_app_valid,
-    input [31:0]      data_from_app,
-    input [3:0]       data_from_app_keep,
-    input             data_from_app_last,
-    input [31:0]      dest_ip_addr,
-    input [15:0]      dest_port,
-    input [15:0]      data_from_app_length,
+//inputs from application software to UDP/TCP stack
+input [31:0]        udp_from_app_data,
+input               udp_from_app_valid,
+input [3:0]         udp_from_app_keep,
+input               udp_from_app_last,
+output              udp_to_app_ready,
 
-    input [7:0]       tcp_ctrl_type,
+input [31:0]        dest_ip_addr,
+input [15:0]        dest_port,
+input [15:0]        data_from_app_length,
 
-    /* output interface
-    */
-    output [31:0]     tdata,
-    output [3:0]      tkeep,
-    output            tvalid,
-    output            tlast,
-    input             tready
+input [7:0]         tcp_ctrl_type,
+
+/* output interface @ clk_8
+*/
+output [7:0]        axis_tdata_out,
+output              axis_tvalid_out,
+output              axis_tlast_out,
+input               axis_tready_in
 );
 
    // The IP and MAC addresses for the FPGA:
@@ -54,6 +54,7 @@ wire [31:0]         udp_data_to_ip;
 wire                udp_data_valid;
 wire [3:0]          udp_data_keep;
 wire                udp_data_last;
+wire                udp_data_ready;
 wire [31:0]         ip_addr;
 
 // TCP send
@@ -81,7 +82,11 @@ wire                ip_send_ready, arp_send_ready, req_en, r_mac_cache_en;//, cp
 wire [31:0]         arp_send_ip_addr, r_mac_cache_ip_addr, cpu_ip_data, cpu_arp_data;
 wire                request_ack_out;
 // AXI-4 signals
-wire [31:0]       tdata_r1, tdata_r2;
+wire [31:0]         tdata_r1, tdata_r2;
+wire [31:0]         tdata_32;
+wire [3:0]          tkeep_32;
+wire                tvalid_32, tlast_32, tready_32;
+
 
 udp_send udp_send_module
   (
@@ -89,15 +94,17 @@ udp_send udp_send_module
    .reset(reset),
    //from software app
 
-   .data_in(data_from_app),
-   .data_valid_in(data_from_app_valid),
-   .data_keep_in  (data_from_app_keep),
-   .data_last_in  (data_from_app_last),
-   .op(op),
+   .data_in(udp_from_app_data),
+   .data_valid_in(udp_from_app_valid),
+   .data_keep_in  (udp_from_app_keep),
+   .data_last_in  (udp_from_app_last),
+   .data_ready_out(udp_to_app_ready),
+
    .ip_addr_in(dest_ip_addr),
    .dest_port(dest_port),
 
    .length_in(data_from_app_length),
+   .data_ready_in(udp_data_ready),
    .data_out(udp_data_to_ip),
    .data_valid_out(udp_data_valid),
    .data_keep_out (udp_data_keep),
@@ -105,7 +112,7 @@ udp_send udp_send_module
 
    .length_out(udp_data_length)
    );
-tcp_send tcp_send_module
+/*tcp_send tcp_send_module
   (
    .clk(clk),
    .reset(reset),
@@ -123,7 +130,7 @@ tcp_send tcp_send_module
    .tcp_data_out(tcp_data),
    .tcp_length_out(tcp_data_length)
    );
-
+*/
 
 ip_send ip_send_module
   (
@@ -136,6 +143,7 @@ ip_send ip_send_module
    .udp_valid_in(udp_data_valid),
    .udp_keep_in       (udp_data_keep),
    .udp_last_in       (udp_data_last),
+   .udp_ready_out     (udp_data_ready),
    .udp_data_length_in(udp_data_length),
 
    // from TCP send
@@ -143,12 +151,12 @@ ip_send ip_send_module
    .tcp_valid_in(tcp_data_valid),
    .tcp_keep_in       (tcp_data_keep),
    .tcp_last_in       (tcp_data_last),
+   .tcp_ready_out     (),
    .tcp_data_length_in(tcp_data_length),
    // send buffer
-   .ready(ip_send_ready),
+   .ip_ready_out(ip_send_ready),
    // output ports
    .oip_addr(ip_send_ip_addr),
-   .udp_ready(udp_ready),
    .tdata(send_ip_data),
    .tkeep(send_ip_keep),
    .tlast(send_ip_last),
@@ -208,11 +216,28 @@ send_buffer send_buffer_module
    .r_mac_cache_en(r_mac_cache_en),
    .r_mac_cache_ip_addr(r_mac_cache_ip_addr),
 
-   .tdata(tdata),
-   .tvalid(tvalid),
-   .tkeep(tkeep),
-   .tlast(tlast),
-   .tready(1'b1)
+   .axis_tdata_out(tdata_32),
+   .axis_tvalid_out(tvalid_32),
+   .axis_tkeep_out(tkeep_32),
+   .axis_tlast_in(tlast_32),
+   .axis_tready_in(tready_32)
 
    );
+
+axis32to8 axis32to8_i (
+    .clk_32(clk),
+    .reset_32(reset),
+    .axis_tdata_in(tdata_32),
+    .axis_tvalid_in(tvalid_32),
+    .axis_tkeep_in(tkeep_32),
+    .axis_tlast_in(tlast_32),
+    .axis_tready_out(tready_32),
+
+    .clk_8(clk_8),
+    .reset_8(reset_8),
+    .axis_tready_in(axis_tready_in),
+    .axis_tdata_out(axis_tdata_out),
+    .axis_tvalid_out(axis_tvalid_out),
+    .axis_tlast_out(axis_tlast_out)
+);
 endmodule

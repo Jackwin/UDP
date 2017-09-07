@@ -41,16 +41,14 @@ module send_buffer
     output reg          r_mac_cache_en,
     output reg [31:0]   r_mac_cache_ip_addr,
 
-    output reg [31:0]   tdata,
-    output reg          tvalid,
-    output reg [3:0]    tkeep,
-    output reg          tlast,
-    input               tready
+    output reg [31:0]   axis_tdata_out,
+    output reg          axis_tvalid_out,
+    output reg [3:0]    axis_tkeep_out,
+    output reg          axis_tlast_out,
+    input               axis_tready_in
 );
 
-reg                 tvalid_r = 1'b0;
-reg                 tlast_r = 1'b0;
-reg [3:0]           tkeep_r = 4'h0;
+
 reg [1:0]           tail_cnt;
 
 
@@ -167,19 +165,19 @@ always @(posedge clk or posedge reset) begin
        ri_data[i] <= 32'h0;
   end else
     begin
-       tdata <= data_r3;
+       axis_tdata_out <= data_r3;
        data_r3 <= data_r2;
        data_r2 <= data_r1;
 
-       tkeep <= keep_r3;
+       axis_tkeep_out <= keep_r3;
        keep_r3 <= keep_r2;
        keep_r2 <= keep_r1;
 
-       tvalid <= valid_r3;
+       axis_tvalid_out <= valid_r3;
        valid_r3 <= valid_r2;
        valid_r2 <= valid_r1;
 
-       tlast <= last_r3;
+       axis_tlast_out <= last_r3;
        last_r3 <= last_r2;
        last_r2 <= last_r1;
 
@@ -210,12 +208,11 @@ always @(posedge clk or posedge reset) begin
        arp_send_last_r2 <= arp_send_last_r1;
 
        arp_send_valid_r <= arp_send_valid;
-       tlast_r <= 1'b0;
 
        case (ri_state)
          `INIT: begin
             tail_cnt <= 'h0;
-            if (ip_send_valid & tready) begin
+            if (ip_send_valid & axis_tready_in) begin
                data_r3 <= DES_MAC[47:16];
                data_r2 <= {DES_MAC[15:0], SRC_MAC[47:32]};
                data_r1 <= SRC_MAC[31:0];
@@ -233,7 +230,7 @@ always @(posedge clk or posedge reset) begin
                ri_ip_addr <= ip_send_addr;
                ri_count <= 8'h1; //start receiving at the second word
             end // if (ip_send_valid)
-            else if (arp_send_valid & tready) begin
+            else if (arp_send_valid & axis_tready_in) begin
                data_r3 <= DES_MAC[47:16];
                data_r2 <= {DES_MAC[15:0], SRC_MAC[47:32]};
                data_r1 <= SRC_MAC[31:0];
@@ -250,83 +247,83 @@ always @(posedge clk or posedge reset) begin
             end
             else begin
                ri_state <= `INIT;
-               tvalid_r <= 1'b0;
-               tkeep_r <= 4'h0;
 
             end // else: !if(arp_send_valid)
          end
          `RECV: begin
+            if (ip_send_valid_r1 && !arp_send_valid_r && axis_tready_in) begin
+                ip_send_symbol <= 'b1;
+                arp_send_symbol <= 1'b0;
 
-            if (ip_send_valid_r1 && !arp_send_valid_r) begin
-               ip_send_symbol <= 'b1;
-               arp_send_symbol <= 1'b0;
                 arp_send_ready <= 1'b0;
                 ip_send_ready <= 1'b1;
-               if (ip_head) begin
-                  data_r1 <= {16'h0800, ip_data_r1[31:16]};
-                  keep_r1 <= {2'b11, ip_send_keep_r1[3:2]};
-                  last_r1 <= 1'b0;
-                  valid_r1 <= 1'b1;
-                  ip_head <= 1'b0;
-               end
-               else begin
-                  data_r1 <= {ip_data_r2[15:0], ip_data_r1[31:16]};
-                  keep_r1 <= {ip_send_keep_r2[1:0], ip_send_keep_r1[3:2]};
-                  last_r1 <= 1'b0;
-                  valid_r1 <= ip_send_valid_r2 | ip_send_valid_r1;
-                  buffer_cnt <= 'h1;
-               end
-               ri_data[ri_count] <= ip_send_data;
-               ri_count <= ri_count + 8'h1;
+                if (ip_head) begin
+                    data_r1 <= {16'h0800, ip_data_r1[31:16]};
+                    keep_r1 <= {2'b11, ip_send_keep_r1[3:2]};
+                    last_r1 <= 1'b0;
+                    valid_r1 <= 1'b1;
+                    ip_head <= 1'b0;
+                end
+                else begin
+                    data_r1 <= {ip_data_r2[15:0], ip_data_r1[31:16]};
+                    keep_r1 <= {ip_send_keep_r2[1:0], ip_send_keep_r1[3:2]};
+                    last_r1 <= 1'b0;
+                    valid_r1 <= ip_send_valid_r2 | ip_send_valid_r1;
+                    buffer_cnt <= 'h1;
+                end
+                    ri_data[ri_count] <= ip_send_data;
+                    ri_count <= ri_count + 8'h1;
             end
-            else if (!ip_send_valid_r1 && arp_send_valid_r) begin
-               arp_send_symbol <= 1'b1;
-               ip_send_symbol <= 1'b0;
-               ip_send_ready <= 1'b0;
-               arp_send_ready <= 1'b1;
-               if (arp_head) begin
-                  data_r1 <= {16'h0806, arp_data_r1[31:16]};
-                  keep_r1 <= {2'b11, arp_send_keep_r1[3:2]};
-                  last_r1 <= 1'b0;
-                  valid_r1 <= 1'b1;
-                  arp_head <= 'b0;
-               end
-               else begin
-                  //arp_data_r1 <= arp_send_data;
-                 // data_r1 <= {arp_data_r1[15:0], arp_send_data[31:16]};
-                  data_r1 <= {arp_data_r2[15:0], arp_data_r1[31:16]};
-                  keep_r1 <= {arp_send_keep_r2[1:0], arp_send_keep_r1[3:2]};
-                  valid_r1 <= arp_send_valid_r2 | arp_send_valid_r1;
-                  last_r1 <= 1'b0;
-               end
+            else if (!ip_send_valid_r1 && arp_send_valid_r && axis_tready_in) begin
+                arp_send_symbol <= 1'b1;
+                ip_send_symbol <= 1'b0;
+                ip_send_ready <= 1'b0;
+                arp_send_ready <= 1'b1;
+                if (arp_head) begin
+                    data_r1 <= {16'h0806, arp_data_r1[31:16]};
+                    keep_r1 <= {2'b11, arp_send_keep_r1[3:2]};
+                    last_r1 <= 1'b0;
+                    valid_r1 <= 1'b1;
+                    arp_head <= 'b0;
+                end
+                else begin
+                    data_r1 <= {arp_data_r2[15:0], arp_data_r1[31:16]};
+                    keep_r1 <= {arp_send_keep_r2[1:0], arp_send_keep_r1[3:2]};
+                    valid_r1 <= arp_send_valid_r2 | arp_send_valid_r1;
+                    last_r1 <= 1'b0;
+                end
             end
-            else if (!ip_send_valid_r1 && !arp_send_valid_r)
-              begin
-                 if (ip_send_symbol) begin
+            else if (!ip_send_valid_r1 && !arp_send_valid_r && axis_tready_in)begin
+                if (ip_send_symbol) begin
                     data_r1 <= {ip_data_r2[15:0], 16'h5555};
                     keep_r1 <= {ip_send_keep_r2[1:0], 2'b00};
                     last_r1 <= ip_send_last_r2;
                     valid_r1 <= 1'b1;
-                 end
-                 else if (arp_send_symbol) begin
+                end
+                else if (arp_send_symbol) begin
                     data_r1 <= {arp_data_r2[15:0], 16'h5555};
                     keep_r1 <= {arp_send_keep_r2[1:0], 2'b00};
                     last_r1 <= arp_send_last_r2;
                     valid_r1 <= 1'b1;
-                 end
-                 ip_send_ready <= 1'b0;
+                end
+                ip_send_ready <= 1'b0;
+                arp_send_ready <= 1'b0;
+                ri_state <= `WAIT;
+                ri_buf_wait <= 1'b1;
+                ri_buf_translate <= 1'b1;
+            end // else: !if(ip_send_valid)
+            else begin
+                ip_send_ready <= 1'b0;
                  arp_send_ready <= 1'b0;
-                 ri_state <= `WAIT;
-                 ri_buf_wait <= 1'b1;
-                 ri_buf_translate <= 1'b1;
-              end // else: !if(ip_send_valid)
-         end
+                ri_state <= `WAIT;
+            end
+        end
          `WAIT: begin
             ri_buf_translate <= 1'b0;
             ip_send_ready <= 1'b1;
             arp_send_ready <= 1'b1;
             ri_count <= 8'h0;
-            //tvalid_r <= 1'b1;
+            //axis_axis_tvalid_out_out_r <= 1'b1;
             //tkeep_r <= 4'hf;
             valid_r1 <= 1'b0;
             keep_r1 <= 1'b0;
@@ -335,7 +332,7 @@ always @(posedge clk or posedge reset) begin
             arp_send_symbol <= 1'b0;
             if (tail_cnt == 2'h2) begin
                ri_state <= `INIT;
-              // tlast_r <= 1'b1;
+              // axis_tlast_out_r <= 1'b1;
             end
             else begin
                tail_cnt <= tail_cnt + 2'h1;

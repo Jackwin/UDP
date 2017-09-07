@@ -43,21 +43,23 @@ module ip_send
     input               ucp_valid_in,
     input [3:0]         udp_keep_in,
     input               udp_last_in,
+    output              udp_ready_out,
     input [15:0]        udp_data_length_in,
     // from TCP send
     input [31:0]        tcp_data_in,
     input               tcp_valid_in,
     input [3:0]         tcp_keep_in,
     input               tcp_last_in,
+    output              tcp_ready_out,
     input [15:0]        tcp_data_length_in,
     // send buffer
-    input               ready,
+    input               ready_in,
     // output ports
     output reg          conflict_flag_out,
     output reg [31:0]   oip_addr,
     output [15:0]       data_length_out,
     output reg          length_valid_out,
-    output              udp_ready,
+
     output reg [31:0]   axis_tdata_out,
     output reg          axis_tvalid_out,
     output reg [3:0]    axis_tkeep_out,
@@ -86,7 +88,8 @@ reg                  tcp_udp_valid_buf;
 
 integer              k;
 
-assign udp_ready = ready;
+assign udp_ready_out = ready_in;
+assign tcp_ready_out = ready_in;
 assign data_length_out = total_length;
 
 // Choose the data source
@@ -169,7 +172,7 @@ always @(posedge clk or posedge reset) begin
          accum2 <= 'h0;
 
     end
-    else if (valid_r) begin
+    else if (valid_r && ready_in) begin
          axis_tvalid_out <= 1'b0;
          length_valid_out <= 1'b0;
          axis_tkeep_out <= 'h0;
@@ -398,7 +401,7 @@ always @(posedge clk or posedge reset) begin
                end
         endcase
     end
-    else if (~valid_r && |cnt != 1'b0) begin
+    else if (~valid_r && ready_in && |cnt != 1'b0) begin
         if (bufcnt != 4'b0000) begin
             if (bufcnt == 4'b0001) begin
                 axis_tlast_out <= 1'b1;

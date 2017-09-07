@@ -59,6 +59,7 @@ module ip_packet_gen
 
 wire [31:0]          udp_data;
 wire                 udp_data_valid;
+wire                 udp_to_app_ready;
 wire                 tcp_error;
 wire                 udp_error;
 
@@ -67,10 +68,12 @@ wire                 tvalid_32;
 wire                 tlast_32;
 wire [3:0]           tkeep_32;
 
-reg [31:0]           memory[0:128];
+reg [36:0]           memory[0:128];
 // IP data generation data
 wire [31:0]          data_gen;
 reg                  data_gen_valid;
+wire [3:0]           data_gen_keep;
+wire                 data_gen_last;
 reg [6:0]            data_cnt;
 reg [15:0]           data_gen_length;
 reg [1:0]            op;
@@ -96,54 +99,60 @@ always @(posedge clk_32 or posedge reset_32) begin
       state <= DATA_IDLE;
       timer_cnt <= 'h0;
       op <= 2'h2;
+      data_gen_valid <= 1'b0;
    end
    else begin
       data_gen_valid <= 1'b0;
-
+      data_gen_keep <= 4'h0;
+      data_gen_last <= 1'b0;
       case(state)
         DATA_IDLE: begin
-           data_cnt <= 'h0;
-           timer_cnt <= 'h0;
-           if (enable_ip_data_gen & axis_tready_in) begin
-              state <= DATA_GEN;
-              op <= 'h1;
-           end
-           else begin
-              state <= DATA_IDLE;
-           end
+            data_cnt <= 'h0;
+            timer_cnt <= 'h0;
+            if (enable_ip_data_gen & axis_tready_in) begin
+                state <= DATA_GEN;
+                op <= 'h1;
+            end
+            else begin
+                state <= DATA_IDLE;
+            end
         end
         DATA_GEN: begin
           // op <= 2'h2; // 2:Send TCP data; 1: send UDP data
-           data_cnt <= data_cnt + 'h1;
-           data_gen_valid <= 1'b1;
-           data_gen_length <= ('d64 << 2);
-           if (data_cnt == 'd63) begin
-              state <= DATA_DONE;
-           end
-           else begin
-              state <= DATA_GEN;
-           end
+            if (udp_to_app_ready) begin
+                data_cnt <= data_cnt + 'h1;
+            end
+            data_gen_valid <= 1'b1;
+             data_gen_length <= ('d64 << 2);
+            if (data_cnt == 'd63) begin
+                state <= DATA_DONE;
+            end
+            else begin
+                state <= DATA_GEN;
+            end
         end // case: DATA_GEN
         DATA_DONE: begin
-           data_gen_valid <= 1'b0;
-           data_cnt <= 'h0;
-           timer_cnt <= timer_cnt + 6'h1;
-           if (timer_cnt == 6'h3f) begin // Delay for one certain period
-              state <= DATA_IDLE;
-           end
-           else begin
-             state <= DATA_DONE;
-           end
+            data_gen_valid <= 1'b0;
+            data_cnt <= 'h0;
+            timer_cnt <= timer_cnt + 6'h1;
+            if (timer_cnt == 6'h3f) begin // Delay for one certain period
+                state <= DATA_IDLE;
+            end
+            else begin
+                state <= DATA_DONE;
+            end
         end // case: DATA_DONE
         default: begin
-           state <= DATA_IDLE;
-           data_cnt <= 'h0;
+            state <= DATA_IDLE;
+            data_cnt <= 'h0;
         end
       endcase // case (state)
    end // else: !if(reset_32)
 end // always @ (posedge clk_32 or posedge reset_32)
 
-assign data_gen = memory[data_cnt];
+assign data_gen = memory[data_cnt][31:0];
+assign data_gen_keep = memory[data_cnt][35:32];
+assign data_gen_last = memory[data_cnt][36];
 
 send_top send_top_module
   (
@@ -157,20 +166,23 @@ send_top send_top_module
    .arp_reply_in        (arp_reply_in),
    .arp_reply_ack_out   (arp_reply_ack_out),
    // Input data interface
-   .data_from_app_valid(data_gen_valid),
-   .data_from_app(data_gen),
-   .op(op),
+   .udp_from_app_valid(data_gen_valid),
+   .udp_from_app_data(data_gen),
+   .udp_from_app_keep   (data_gen_keep),
+   .udp_from_app_last   (data_gen_last),
+   .udp_to_app_ready    (udp_to_app_ready),
+
    .dest_ip_addr(dest_ip_addr),
    .dest_port(dest_port),
    .data_from_app_length(data_gen_length),
    .tcp_ctrl_type(tcp_ctrl_type),
 
-   .tdata(tdata_32),
-   .tkeep(tkeep_32),
-   .tvalid(tvalid_32),
-   .tlast(tlast_32)
+   .axis_tdata_out(axis_tdata_out),
+   .axis_tvalid_out(axis_tvalid_out),
+   .axis_tlast_out(axis_tlast_out),
+   .axis_tready_in(axis_tready_in)
    );
-
+/*
 axis32to8 axis32to8_i (
     .clk_32(clk_32),
     .reset_32(1'b0),
@@ -187,7 +199,7 @@ axis32to8 axis32to8_i (
     .axis_tvalid_out(axis_tvalid_out),
     .axis_tlast_out(axis_tlast_out)
 );
-
+*/
 
 
 

@@ -31,8 +31,8 @@ module udp_send(
     input               data_valid_in,
     input [3:0]         data_keep_in,
     input               data_last_in,
+    output              data_ready_out,
 
-    input [1:0]         op,
     input [31:0]        ip_addr_in,
     input [15:0]        dest_port,
     input [15:0]        length_in,
@@ -40,6 +40,7 @@ module udp_send(
     //udp data out
     output reg [31:0]   ip_addr_out,
 
+    input               data_ready_in,
     output reg [31:0]   data_out,
     output reg          data_valid_out,
     output reg [3:0]    data_keep_out,
@@ -53,6 +54,8 @@ reg [31:0]              data_buffer1, data_buffer2;
 reg [3:0]               keep_buf1, keep_buf2;
 reg                     last_buf1, last_buf2;
 reg                     valid_buf1, valid_buf2;
+
+assign data_ready_out = data_ready_in;
 
 always @(posedge clk or posedge reset) begin
     if (reset) begin
@@ -70,7 +73,7 @@ always @(posedge clk or posedge reset) begin
         {last_buf2, last_buf1} <= 'h0;
         {valid_buf2, valid_buf1} <= 'h0;
       end
-    else if (data_valid_in && op == 'h1) begin
+    else if (data_valid_in && data_ready_in) begin
          case (cnt)
            0: begin
               data_out <= {`SOURCE_PORT, dest_port};
@@ -122,7 +125,7 @@ always @(posedge clk or posedge reset) begin
            default: cnt <= 2'h0;
          endcase
     end
-    else if (~data_valid_in && op == 'h1) begin
+    else if (~data_valid_in && data_ready_in) begin
          if (bufcnt != 2'h0) begin
             data_valid_out <= valid_buf2;
             data_out <= data_buffer2;
