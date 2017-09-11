@@ -32,13 +32,14 @@ module recv_buffer
     output          axis_tready_o,
 
     // Output ports
-    input           axis_tready_in,
+    input           arp_axis_tready_in,
     output reg [7:0] arp_axis_tdata_out,
     output reg      arp_axis_tvalid_out,
     output reg      arp_axis_tlast_out,
     // ARP request from remote
     output reg      arp_request_out,
 
+    input           ip_axis_tready_in,
     output reg [7:0] ip_axis_tdata_out,
     output reg      ip_axis_tvalid_out,
     output reg      ip_axis_tlast_out
@@ -82,7 +83,8 @@ reg                 timer_ena;
 wire                timer_out;
 reg                 timer_reset;
 
-assign axis_tready_o = 1'b1;
+//assign axis_tready_o = 1'b1;
+assign axis_tready_o = arp_axis_tready_in || ip_axis_tready_in;
 
 always @(posedge clk) begin
     if (reset) begin
@@ -139,7 +141,7 @@ always @(posedge clk) begin
                 byte_cnt <= 'h0;
                 ip_axis_tlast_out <= 1'b0;
                 arp_axis_tlast_out <= 1'b0;
-                if (data_6bytes == mac_addr && axis_tvalid_in) begin
+                if ((data_6bytes == mac_addr || data_6bytes == 48'hffffffffffff) && axis_tvalid_in) begin
                     state <= MAC_s;
                 end
                 else begin

@@ -14,6 +14,7 @@ module axis_8to32 (
     output [31:0]   axis_tdata_out,
     output [3:0]    axis_tkeep_out,
     output          axis_tvalid_out,
+    output reg      axis_tfirst_out,
     output          axis_tlast_out,
     input           axis_tready_in
 );
@@ -41,16 +42,24 @@ assign axis_tready_out = ~fifo_full;
 assign fifo_rd_ena = (axis_tready_in && ~fifo_empty) ? 1'b1 : 1'b0;
 
 assign axis_tdata_out = fifo_dout[37:6];
-assign {axis_tkeep_out, axis_tlast_out, axis_tvalid_out} = fifo_dout_valid ? fifo_dout[5:0] :
-                                                           (axis_tready_in ? 'h0 : {axis_tkeep_out, axis_tlast_out, axis_tvalid_out});
+//assign {axis_tkeep_out, axis_tlast_out, axis_tvalid_out} = fifo_dout_valid ? fifo_dout[5:0] : {axis_tkeep_out, axis_tlast_out, axis_tvalid_out};
+assign axis_tvalid_out = fifo_dout_valid;
+assign {axis_tkeep_out, axis_tlast_out} = fifo_dout_valid ? fifo_dout[5:1] : 'h0;
 
 
 always @(posedge clk_32) begin
     if (reset_32) begin
         fifo_dout_valid <= 1'b0;
+        axis_tfirst_out <= 1'b1;
     end
     else begin
         fifo_dout_valid <= fifo_rd_ena;
+        if (axis_tvalid_out) begin
+            axis_tfirst_out <= 1'b0;
+        end
+        else if (axis_tlast_out) begin
+            axis_tfirst_out <= 1'b1;
+        end
     end
 end
 
@@ -128,12 +137,16 @@ always @(*) begin
             end
         end
         3'd3: begin
-            if (axis_tvalid_in) begin
+            if (axis_tvalid_in && !axis_tlast_in) begin
                 data_keep = 4'b1111;
                 data_last = 1'b0;
                 data_valid = 1'b1;
             end
-
+            else if (axis_tvalid_in && axis_tlast_in) begin
+                data_keep = 4'b1111;
+                data_last = 1'b1;
+                data_valid = 1'b1;
+            end
             else begin
                 data_keep = 4'b0000;
                 data_last = 1'b0;

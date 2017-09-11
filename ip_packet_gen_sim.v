@@ -22,15 +22,15 @@
 
 module ip_packet_gen_sim();
 reg             clk_32;
-reg             reset_32;
+reg             reset_32, reset_rapid;
 reg             enable_pat_gen;
-reg             clk_8;
+reg             clk_8, clk_rapid;
 reg [1:0]       op;
 reg [7:0]       tcp_ctrl_type;
 reg [31:0]      dest_ip_addr = 32'hddccbbaa;
 reg [15:0]      dest_port = 32'd1024;
 reg [31:0]      remote_ip_addr = 32'hddccbbaa;
-reg [47:0]      remote_mac_addr = 48'ha5a4a3a2a1a0;
+reg [47:0]      remote_mac_addr = 48'hdd0504030201;
 
 wire [31:0]     local_ip_addr = 32'hddccbbaa;
 reg             arp_reply;
@@ -51,6 +51,21 @@ wire [47:0]     remote_mac_addr_out;
 wire            arp_reply_out;
 wire            arp_reply_ack;
 
+wire            udpdata_tready_in ;
+wire [31:0]     udpdata_tdata_out;
+wire            udpdata_tvalid_out;
+wire [3:0]      udpdata_tkeep_out;
+wire            udpdata_tfirst_out;
+wire            udpdata_tlast_out;
+wire [15:0]     udpdata_length_out;
+
+wire [15:0]     rapid_length_out;
+wire [63:0]     rapid_data_out;
+wire            rapid_valid_out;
+wire            rapid_first_out;
+wire [7:0]      rapid_keep_out;
+wire            rapid_last_out;
+
 initial begin
     clk_32 = 1'b0;
     forever
@@ -64,8 +79,19 @@ initial begin
 end
 
 initial begin
+    clk_rapid = 1'b0;
+    forever
+        #32 clk_rapid = ~clk_rapid;
+end
+
+initial begin
     reset_32 = 1'b1;
     #100 reset_32 = 1'b0;
+end
+
+initial begin
+    reset_rapid = 1'b1;
+    #120 reset_rapid = 1'b0;
 end
 
 initial begin
@@ -100,8 +126,16 @@ initial begin
     #30000;
     $stop;
 end // initial begin
-
-
+/*
+initial begin
+    udpdata_tready_in = 1'b1;
+    #3000;
+    @(posedge clk_32);
+    udpdata_tready_in <= 1'b0;
+    @(posedge clk_32);
+    udpdata_tready_in = 1'b1;
+end
+*/
 ip_packet_gen ip_packet_gen_module
 (
 
@@ -132,9 +166,9 @@ ip_packet_gen ip_packet_gen_module
 
 recv_top recv_top_i
 (
-    .clk(clk_8),
-    .reset        (areset),
-    .mac_addr     (48'hdd0504030201),
+    .clk_8(clk_8),
+    .reset_8        (areset),
+    .local_mac_addr     (remote_mac_addr),
     .local_ip_addr      (local_ip_addr),
 
     .axis_tdata_in(tdata),
@@ -149,8 +183,42 @@ recv_top recv_top_i
     .arp_reply_ack_in   (arp_reply_ack),
     .arp_reply_out (arp_reply_out),
 
-    .tcp_error_out(tcp_error_out),
-    .udp_error_out(udp_error_out)
+    .clk_32             (clk_32),
+    .reset_32           (reset_32),
+    .udpdata_tready_in  (udpdata_tready_in),
+    .udpdata_tdata_out  (udpdata_tdata_out),
+    .udpdata_tfirst_out (udpdata_tfirst_out),
+    .udpdata_tvalid_out (udpdata_tvalid_out),
+    .udpdata_tkeep_out  (udpdata_tkeep_out),
+    .udpdata_tlast_out  (udpdata_tlast_out),
+    .udp_length_out     (udpdata_length_out)
+
 );
+
+udp2rapidio_interface udp2rapidio_interface_i
+(
+    .clk_udp        (clk_32),
+    .reset_udp      (reset_32),
+    .udp_data_in    (udpdata_tdata_out),
+    .udp_valid_in   (udpdata_tvalid_out),
+    .udp_first_in   (udpdata_tfirst_out),
+    .udp_keep_in    (udpdata_tkeep_out),
+    .udp_last_in    (udpdata_tlast_out),
+    .udp_length_in  (udpdata_length_out),
+    .udp_ready_out  (udpdata_tready_in),
+
+    .clk_rapid      (clk_rapid),
+    .reset_rapid    (reset_rapid),
+    .rapid_ready_in (1'b1),
+    .rapid_ack_in   (),
+    .rapid_length_out(rapid_length_out),
+    .rapid_data_out (rapid_data_out),
+    .rapid_valid_out(rapid_valid_out),
+    .rapid_first_out(rapid_first_out),
+    .rapid_keep_out (rapid_keep_out),
+    .rapid_last_out (rapid_last_out)
+
+    );
+
 
 endmodule

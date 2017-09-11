@@ -38,7 +38,8 @@ wire [0:0]              udp_tvalid_ila;
 wire [0:0]              udp_tlast_ila;
 wire [0:0]              udp_tready_ila;
 
-assign udp_axis_tready_out = 1'b1;
+//assign udp_axis_tready_out = 1'b1;
+assign udp_axis_tready_out = udpdata_tready_in;
 
 assign data_length = (length == 16'b0) ? 16'b0 : (length >> 2) - 2; //number of total bytes divided by 4 makes the number of total words, and subtract 2 words for the header
 
@@ -76,55 +77,59 @@ always @(posedge clk) begin
         length <= 16'b0;
         checksum <= 16'b0;
     end
-    else if (udp_axis_tvalid_in) begin
-
-        case (cnt)
-            0,2,4,6: begin
-                cnt <= cnt + 4'b1;
-            end
-            1: begin
-                source_port <= data_2bytes;
-                cnt <= cnt + 4'b1;
-            end
-            3: begin
-                dest_port_out <= data_2bytes;
-                cnt <= cnt + 4'b1;
-            end
-            5: begin
-                length <= data_2bytes;
-                cnt <= cnt + 4'b1;
-            end
-            7: begin
-                checksum <= data_2bytes;
-                cnt <= cnt + 4'b1;
-            end
-            8: begin
-                udpdata_tdata_out <= udp_axis_tdata_in;
-                udpdata_tvalid_out <= udp_axis_tvalid_in;
-                udpdata_tlast_out <= udp_axis_tlast_in;
-                if (udp_axis_tlast_in) begin
+    else begin
+        if (udp_axis_tvalid_in && udpdata_tready_in) begin
+            case (cnt)
+                0,2,4,6: begin
                     cnt <= cnt + 4'b1;
                 end
-            end
-            9: begin
-                cnt <= 'h0;
-                udpdata_tdata_out <= 'h0;
-                udpdata_tvalid_out <= 1'b0;
-                udpdata_tlast_out <= 1'b0;
+                1: begin
+                    source_port <= data_2bytes;
+                    cnt <= cnt + 4'b1;
+                end
+                3: begin
+                    dest_port_out <= data_2bytes;
+                    cnt <= cnt + 4'b1;
+                end
+                5: begin
+                    length <= data_2bytes;
+                    cnt <= cnt + 4'b1;
+                end
+                7: begin
+                    checksum <= data_2bytes;
+                    cnt <= cnt + 4'b1;
+                end
+                8: begin
+                    udpdata_tdata_out <= udp_axis_tdata_in;
+                    udpdata_tvalid_out <= udp_axis_tvalid_in;
+                    udpdata_tlast_out <= udp_axis_tlast_in;
+                    if (udp_axis_tlast_in) begin
+                        cnt <= cnt + 4'b1;
+                    end
+                end
+                9: begin
+                    cnt <= 'h0;
+                    udpdata_tdata_out <= 'h0;
+                    udpdata_tvalid_out <= 1'b0;
+                    udpdata_tlast_out <= 1'b0;
 
-            end
-            default: begin
-                cnt <= 'h0;
-            end
-        endcase // cnt
-    end
-    else begin
-        cnt <= 'd0;
-        udpdata_tdata_out <= udp_axis_tdata_in;
-        udpdata_tvalid_out <= 1'b0;
-        udpdata_tlast_out <= udp_axis_tlast_in;
-        source_port <= source_port;
-        dest_port_out <= dest_port_out;
+                end
+                default: begin
+                    cnt <= 'h0;
+                end
+            endcase // cnt
+        end
+        else begin
+            cnt <= cnt;
+            udpdata_tdata_out <= udp_axis_tdata_in;
+            udpdata_tvalid_out <= 1'b0;
+            udpdata_tlast_out <= udp_axis_tlast_in;
+            source_port <= source_port;
+            dest_port_out <= dest_port_out;
+        end
+        if (udp_axis_tlast_in) begin
+            cnt <= 'h0;
+        end
     end
 end
 assign udp_tvalid_ila[0] = udpdata_tvalid_out;

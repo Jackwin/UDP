@@ -40,7 +40,7 @@ module ip_send
     input [31:0]        ip_addr,
     // from UDP send
     input [31:0]        udp_data_in,
-    input               ucp_valid_in,
+    input               udp_valid_in,
     input [3:0]         udp_keep_in,
     input               udp_last_in,
     output              udp_ready_out,
@@ -77,7 +77,7 @@ reg [31:0]           ip_addr_reg;
 reg [15:0]           total_length, datagram_cnt, accum1, accum2, chksum;
 reg [15:0]           cnt;
 reg [16:0]           tmp_accum1, tmp_accum2;
-reg                  isvalid, axis_tvalid_out;
+reg                  isvalid;
 reg [3:0]            bufcnt;
 
 reg                  valid_r;
@@ -103,7 +103,7 @@ always @(posedge clk or posedge reset) begin
         conflict_flag_out <= 1'b0;
     end
     else begin
-        case({ucp_valid_in, tcp_valid_in})
+        case({udp_valid_in, tcp_valid_in})
             2'b00: begin
                 valid_r <= 1'b0;
                 tcp_udp_data_buf <= 'h0;
@@ -136,7 +136,7 @@ always @(posedge clk or posedge reset) begin
                 tcp_udp_last_buf <= 1'b0;
                 conflict_flag_out <= 1'b1;
             end
-        endcase // case ({ucp_valid_in, tcp_valid_in})
+        endcase // case ({udp_valid_in, tcp_valid_in})
     end // else: !if(reset)
 end // always @ (posedge clk)
 
@@ -154,7 +154,6 @@ always @(posedge clk or posedge reset) begin
         data_buffer4 <= 32'h0;
         data_buffer5 <= 32'h0;
         data_buffer6 <= 32'h0;
-        keep_buffer <= 'h0;
         valid_buffer <= 'h0;
         last_buffer <= 'h0;
         for (k = 0; k < 9; k = k + 1) begin
@@ -188,7 +187,7 @@ always @(posedge clk or posedge reset) begin
                     valid_buffer[0] <= tcp_udp_valid_buf;
                     datagram_cnt <= datagram_cnt + 16'h1;
                     ip_addr_reg  <= ip_addr;
-                    if (ucp_valid_in) begin
+                    if (udp_valid_in) begin
                         total_length <= udp_data_length_in + (`IHL << 2);
                         length_valid_out <= 1'b1;
                     end
@@ -219,7 +218,7 @@ always @(posedge clk or posedge reset) begin
                 end
                 2: begin
                     accum2 <= tmp_accum2[15:0] + tmp_accum2[16];
-                    if (ucp_valid_in) begin
+                    if (udp_valid_in) begin
                         tmp_accum1 <= accum1 + `UDP_CHKSUM_BASE;  //pre-sum
                     end
                     else if (tcp_valid_in) begin
@@ -301,7 +300,7 @@ always @(posedge clk or posedge reset) begin
                end
                 6: begin
                   // send third word of header
-                    if (ucp_valid_in) begin
+                    if (udp_valid_in) begin
                         axis_tdata_out <= {`TTL,`UDP_PROTOCOL,chksum};
                     end
                     else if (tcp_valid_in) begin

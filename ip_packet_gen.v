@@ -87,6 +87,7 @@ reg [5:0]            timer_cnt;
 localparam DATA_IDLE = 2'd0,
   DATA_GEN = 2'd1,
   DATA_DONE = 2'd2;
+  localparam data_length = 27;
 
 always @(posedge clk_32) begin
    enable_ip_data_gen_r <= enable_ip_data_gen;
@@ -103,8 +104,6 @@ always @(posedge clk_32 or posedge reset_32) begin
    end
    else begin
       data_gen_valid <= 1'b0;
-      data_gen_keep <= 4'h0;
-      data_gen_last <= 1'b0;
       case(state)
         DATA_IDLE: begin
             data_cnt <= 'h0;
@@ -123,8 +122,8 @@ always @(posedge clk_32 or posedge reset_32) begin
                 data_cnt <= data_cnt + 'h1;
             end
             data_gen_valid <= 1'b1;
-             data_gen_length <= ('d64 << 2);
-            if (data_cnt == 'd63) begin
+             data_gen_length <= (data_length << 2);
+            if (data_cnt == (data_length - 1)) begin
                 state <= DATA_DONE;
             end
             else begin
@@ -152,7 +151,7 @@ end // always @ (posedge clk_32 or posedge reset_32)
 
 assign data_gen = memory[data_cnt][31:0];
 assign data_gen_keep = memory[data_cnt][35:32];
-assign data_gen_last = memory[data_cnt][36];
+assign data_gen_last = (data_cnt == data_length);
 
 send_top send_top_module
   (
@@ -177,6 +176,8 @@ send_top send_top_module
    .data_from_app_length(data_gen_length),
    .tcp_ctrl_type(tcp_ctrl_type),
 
+   .clk_8               (clk_8),
+   .reset_8             (reset_8),
    .axis_tdata_out(axis_tdata_out),
    .axis_tvalid_out(axis_tvalid_out),
    .axis_tlast_out(axis_tlast_out),

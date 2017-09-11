@@ -36,6 +36,8 @@ input [7:0]         tcp_ctrl_type,
 
 /* output interface @ clk_8
 */
+input               clk_8,
+input               reset_8,
 output [7:0]        axis_tdata_out,
 output              axis_tvalid_out,
 output              axis_tlast_out,
@@ -59,10 +61,10 @@ wire [31:0]         ip_addr;
 
 // TCP send
 wire [31:0]         tcp_data;
-wire                tcp_data_valid;
+wire                tcp_data_valid = 1'b0;
 wire [15:0]         tcp_data_length;
-wire [3:0]          tcp_data_keep;
-wire                tcp_data_last;
+wire [3:0]          tcp_data_keep = 4'h0;
+wire                tcp_data_last = 1'b0;
 
 // Outputs of IP_send_module
 wire [31:0]         ip_send_ip_addr, send_ip_data, send_ip_data_r1;
@@ -154,13 +156,13 @@ ip_send ip_send_module
    .tcp_ready_out     (),
    .tcp_data_length_in(tcp_data_length),
    // send buffer
-   .ip_ready_out(ip_send_ready),
+   .ready_in(ip_send_ready),
    // output ports
    .oip_addr(ip_send_ip_addr),
-   .tdata(send_ip_data),
-   .tkeep(send_ip_keep),
-   .tlast(send_ip_last),
-   .tvalid(send_ip_valid)
+   .axis_tdata_out(send_ip_data),
+   .axis_tvalid_out(send_ip_valid),
+   .axis_tkeep_out(send_ip_keep),
+   .axis_tlast_out(send_ip_last)
    );
 
 arp_send arp_send_module
@@ -219,7 +221,7 @@ send_buffer send_buffer_module
    .axis_tdata_out(tdata_32),
    .axis_tvalid_out(tvalid_32),
    .axis_tkeep_out(tkeep_32),
-   .axis_tlast_in(tlast_32),
+   .axis_tlast_out(tlast_32),
    .axis_tready_in(tready_32)
 
    );

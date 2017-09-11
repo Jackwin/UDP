@@ -16,6 +16,7 @@ module udp_forward (
     input               reset_32,
     output [31:0]       udp_axis_tdata_out,
     output              udp_axis_tvalid_out,
+    output              udp_axis_tfirst_out,
     output [3:0]        udp_axis_tkeep_out,
     output              udp_axis_tlast_out,
     output [15:0]       udp_length_out,
@@ -65,7 +66,7 @@ always @(posedge clk) begin
             data_buf[0] <= udp_axis_tdata_in;
         end
 
-        if (byte_cnt == 'd1 && udp_axis_tvalid_in) begin
+        if (byte_cnt == 'd3 && udp_axis_tvalid_in) begin
             udp_length <= {1'b0, data_2bytes[13:0]};
         end
         else if (udp_axis_tlast_in) begin
@@ -93,9 +94,10 @@ axis_8to32 axis8to32_i (
     .reset_32(reset_32),
     .axis_tready_in(udp_axis_tready_in),
     .axis_tdata_out(udp_axis_tdata_out),
+    .axis_tfirst_out(udp_axis_tfirst_out),
     .axis_tvalid_out(udp_axis_tvalid_out),
     .axis_tkeep_out (udp_axis_tkeep_out),
-    .axis_tlast_out(udp_axis_tready_in)
+    .axis_tlast_out(udp_axis_tlast_out)
 );
 
 /*
